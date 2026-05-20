@@ -229,12 +229,25 @@
   <div class="input-panel">
     <div class="section-label">Prospect inputs</div>
     <div class="field">
-      <label>Monthly transaction volume (ZAR)</label>
-      <input type="number" id="monthlyVol" value="5000000" />
+      <label>Monthly transaction volume (no. of transactions)</label>
+      <input type="number" id="monthlyVol" value="5882" />
     </div>
     <div class="field">
       <label>Average transaction value (ZAR)</label>
       <input type="number" id="avgTxVal" value="850" />
+    </div>
+    <div class="field">
+      <label style="color:rgba(255,255,255,0.35);font-size:11px;letter-spacing:0.3px">TOTAL MONTHLY REVENUE (auto-calculated)</label>
+      <div id="totalRevenueDisplay" style="
+        background: #1a0d2e;
+        border: 1px solid rgba(108,17,232,0.35);
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: 18px;
+        font-weight: 600;
+        color: #c084fc;
+        letter-spacing: -0.5px;
+      ">R 0</div>
     </div>
     <div class="field">
       <label>Current payment success rate (%)</label>
@@ -299,9 +312,9 @@
           <div style="font-size:18px;font-weight:500;color:rgba(255,255,255,0.75)" id="totalMonthly">R 0</div>
         </div>
         <div style="text-align:right;border-left:1px solid rgba(255,255,255,0.08);padding-left:20px">
-          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">% of monthly volume</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">% of annual revenue</div>
           <div style="font-size:32px;font-weight:600;color:#a855f7;letter-spacing:-1px;line-height:1" id="oppPercent">0%</div>
-          <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:3px">annual opp. ÷ monthly vol.</div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:3px">annual opp. ÷ annual revenue</div>
         </div>
       </div>
     </div>
@@ -383,28 +396,50 @@
 
   function calculate() {
     const i = getInputs();
-    const failedTxVolume = i.monthlyVol * (1 - i.successRate);
-    const successGap = Math.max(0, i.stitchSuccessRate - i.successRate);
-    const failedMonthly = i.monthlyVol * successGap;
-    const failedAnnual = failedMonthly * 12;
-    const feeGap = Math.max(0, i.currentFee - i.stitchFee);
-    const excessFees = i.monthlyVol * feeGap;
-    const missingMethods = Math.max(0, i.maxMethods - i.payMethods);
-    const abandonCost = i.monthlyVol * (missingMethods * i.upliftPerMethod);
-    const retryRecovery = failedTxVolume * i.recoveryRate;
-    const totalMonthly = failedMonthly + excessFees + abandonCost + retryRecovery;
-    const totalAnnual = totalMonthly * 12;
-    const currentRetained = i.monthlyVol * i.successRate - i.monthlyVol * i.currentFee;
-    const stitchRetained = i.monthlyVol * i.stitchSuccessRate - i.monthlyVol * i.stitchFee + retryRecovery + abandonCost;
 
-    document.getElementById('failedMonthly').textContent = fmt(failedMonthly);
-    document.getElementById('failedAnnual').textContent = fmt(failedAnnual);
-    document.getElementById('excessFees').textContent = fmt(excessFees);
-    document.getElementById('abandonCost').textContent = fmt(abandonCost);
-    document.getElementById('retryRecovery').textContent = fmt(retryRecovery);
-    document.getElementById('netGainAnnual').textContent = fmt(totalAnnual);
-    document.getElementById('totalMonthly').textContent = fmt(totalMonthly);
-    const oppPct = i.monthlyVol > 0 ? (totalAnnual / i.monthlyVol * 100) : 0;
+    // Core revenue figures
+    const monthlyRevenue = i.monthlyVol * i.avgTxVal;
+    const annualRevenue  = monthlyRevenue * 12;
+
+    // Update auto-calculated revenue display in input panel
+    document.getElementById('totalRevenueDisplay').textContent = fmt(monthlyRevenue);
+
+    // Failed payments
+    const failedTxVolume = monthlyRevenue * (1 - i.successRate);
+    const successGap     = Math.max(0, i.stitchSuccessRate - i.successRate);
+    const failedMonthly  = monthlyRevenue * successGap;
+    const failedAnnual   = failedMonthly * 12;
+
+    // Excess fees
+    const feeGap     = Math.max(0, i.currentFee - i.stitchFee);
+    const excessFees = monthlyRevenue * feeGap;
+
+    // Checkout abandonment
+    const missingMethods = Math.max(0, i.maxMethods - i.payMethods);
+    const abandonCost    = monthlyRevenue * (missingMethods * i.upliftPerMethod);
+
+    // Retry recovery
+    const retryRecovery = failedTxVolume * i.recoveryRate;
+
+    // Totals
+    const totalMonthly = failedMonthly + excessFees + abandonCost + retryRecovery;
+    const totalAnnual  = totalMonthly * 12;
+
+    // Chart inputs
+    const currentRetained = monthlyRevenue * i.successRate - monthlyRevenue * i.currentFee;
+    const stitchRetained  = monthlyRevenue * i.stitchSuccessRate - monthlyRevenue * i.stitchFee + retryRecovery + abandonCost;
+
+    // Update metric cards
+    document.getElementById('failedMonthly').textContent  = fmt(failedMonthly);
+    document.getElementById('failedAnnual').textContent   = fmt(failedAnnual);
+    document.getElementById('excessFees').textContent     = fmt(excessFees);
+    document.getElementById('abandonCost').textContent    = fmt(abandonCost);
+    document.getElementById('retryRecovery').textContent  = fmt(retryRecovery);
+    document.getElementById('netGainAnnual').textContent  = fmt(totalAnnual);
+    document.getElementById('totalMonthly').textContent   = fmt(totalMonthly);
+
+    // % = annual opportunity ÷ annual revenue
+    const oppPct = annualRevenue > 0 ? (totalAnnual / annualRevenue * 100) : 0;
     document.getElementById('oppPercent').textContent = oppPct.toFixed(1) + '%';
 
     animateCounter('totalOpportunity', totalAnnual);
